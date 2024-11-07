@@ -1,0 +1,2 @@
+class ECOSTRESSDownloadFailed(ConnectionError):
+    pass

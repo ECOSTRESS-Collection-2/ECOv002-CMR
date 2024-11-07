@@ -3,7 +3,10 @@ import posixpath
 
 import pandas as pd
 
-def process_orbit_scene_tile_URLs(
+from .variable_from_filename import variable_from_filename
+from .granule_ID_from_filename import granule_ID_from_filename
+
+def interpret_ECOSTRESS_URLs(
         URLs: List[str],
         orbit: int = None,
         scene: int = None) -> pd.DataFrame:
@@ -12,48 +15,36 @@ def process_orbit_scene_tile_URLs(
     for URL in URLs:
         filename = posixpath.basename(URL)
         variable = ""
+
+        granule_ID = granule_ID_from_filename(filename)
         
         # Determine file type and granule name based on filename
         if filename.endswith(".json"):
-            granule_name = filename.split(".")[0]
             type = "JSON Metadata"
         elif filename.endswith(".tif"):
             type = "GeoTIFF Data"
-            granule_name = "_".join(filename.split("_")[:-1])
         elif filename.endswith(".jpeg"):
             type = "GeoJPEG Preview"
-            granule_name = "_".join(filename.split("_")[:-1])
         elif filename.endswith(".jpeg.aux.xml"):
             type = "GeoJPEG Metadata"
-            granule_name = "_".join(filename.split("_")[:-2])
         else:
             raise ValueError(f"Unknown file type for {filename}")
 
         # Extract variable name from filename for data files
         if filename.endswith((".tif", ".jpeg", ".jpeg.aux.xml")):
-            variable = "_".join(filename.split(".")[0].split("_")[9:])
+            variable = variable_from_filename(filename)
 
-        # Parse granule metadata from granule name
-        try:
-            product = "_".join(granule_name.split("_")[1:3])
-            orbit = int(granule_name.split("_")[3])
-            scene = int(granule_name.split("_")[4])
-            tile = granule_name.split("_")[5]
-            # Add extracted information to the records list
-            records.append({
-                "product": product,
-                "variable": variable,
-                "orbit": orbit, 
-                "scene": scene, 
-                "tile": tile, 
-                "type": type,
-                "granule": granule_name,
-                "filename": filename,
-                "URL": URL
-            })
-        except (IndexError, ValueError) as e:
-            print(e)
-            print(f"Filename {filename} does not match expected pattern and was skipped.")
+        records.append({
+            "product": granule_ID.product,
+            "variable": variable,
+            "orbit": granule_ID.orbit, 
+            "scene": granule_ID.scene, 
+            "tile": granule_ID.tile, 
+            "type": type,
+            "granule": granule_ID,
+            "filename": filename,
+            "URL": URL
+        })
 
     # Create a pandas DataFrame from the records
     df = pd.DataFrame(records, columns=[

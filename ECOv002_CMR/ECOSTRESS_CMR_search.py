@@ -10,8 +10,7 @@ from sentinel_tiles import sentinel_tiles
 
 from .constants import *
 from .ECOSTRESS_CMR_search_links import ECOSTRESS_CMR_search_links
-from .process_orbit_scene_tile_URLs import process_orbit_scene_tile_URLs
-from .process_tile_URLs import process_tile_URLs
+from .interpret_ECOSTRESS_URLs import interpret_ECOSTRESS_URLs
 
 def ECOSTRESS_CMR_search(
         product: str, 
@@ -62,10 +61,6 @@ def ECOSTRESS_CMR_search(
         ...     end_date='2023-08-15'
         ... )
         >>> print(df)
-          product                  variable  orbit  scene   tile            type  \
-        0  ECO1BGEO  L2_LSTE_Day_Structure   1234   5678  10UEV  GeoTIFF Data   
-        1  ECO1BGEO  L2_LSTE_Day_Structure   1234   5678  10UEV  JSON Metadata   
-        ...
     """
     # Convert start_date and end_date to date objects if they are strings
     if isinstance(start_date, str):
@@ -90,74 +85,10 @@ def ECOSTRESS_CMR_search(
         CMR_search_URL=CMR_search_URL
     )
 
-    # records = []
-
-    # for URL in URLs:
-    #     filename = posixpath.basename(URL)
-    #     variable = ""
-        
-    #     # Determine file type and granule name based on filename
-    #     if filename.endswith(".json"):
-    #         granule_name = filename.split(".")[0]
-    #         type = "JSON Metadata"
-    #     elif filename.endswith(".tif"):
-    #         type = "GeoTIFF Data"
-    #         granule_name = "_".join(filename.split("_")[:-1])
-    #     elif filename.endswith(".jpeg"):
-    #         type = "GeoJPEG Preview"
-    #         granule_name = "_".join(filename.split("_")[:-1])
-    #     elif filename.endswith(".jpeg.aux.xml"):
-    #         type = "GeoJPEG Metadata"
-    #         granule_name = "_".join(filename.split("_")[:-2])
-    #     else:
-    #         raise ValueError(f"Unknown file type for {filename}")
-
-    #     # Extract variable name from filename for data files
-    #     if filename.endswith((".tif", ".jpeg", ".jpeg.aux.xml")):
-    #         variable = "_".join(filename.split(".")[0].split("_")[9:])
-
-    #     # Parse granule metadata from granule name
-    #     try:
-    #         product = "_".join(granule_name.split("_")[1:3])
-    #         orbit = int(granule_name.split("_")[3])
-    #         scene = int(granule_name.split("_")[4])
-    #         tile = granule_name.split("_")[5]
-    #         # Add extracted information to the records list
-    #         records.append({
-    #             "product": product,
-    #             "variable": variable,
-    #             "orbit": orbit, 
-    #             "scene": scene, 
-    #             "tile": tile, 
-    #             "type": type,
-    #             "granule": granule_name,
-    #             "filename": filename,
-    #             "URL": URL
-    #         })
-    #     except (IndexError, ValueError) as e:
-    #         print(e)
-    #         print(f"Filename {filename} does not match expected pattern and was skipped.")
-
-    # # Create a pandas DataFrame from the records
-    # df = pd.DataFrame(records, columns=[
-    #     "product", 
-    #     "variable", 
-    #     "orbit", 
-    #     "scene",
-    #     "tile", 
-    #     "type", 
-    #     "granule", 
-    #     "filename", 
-    #     "URL"
-    # ])
-
-    if product == "L2T_STARS":
-        df = process_tile_URLs(URLs)
-    else:
-        df = process_orbit_scene_tile_URLs(
-            URLs=URLs,
-            orbit=orbit,
-            scene=scene
-        )
+    df = interpret_ECOSTRESS_URLs(
+        URLs=URLs,
+        orbit=orbit,
+        scene=scene
+    )
 
     return df
