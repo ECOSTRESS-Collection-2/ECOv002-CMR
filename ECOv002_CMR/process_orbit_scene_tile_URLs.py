@@ -3,7 +3,10 @@ import posixpath
 
 import pandas as pd
 
-def process_orbit_scene_tile_URLs(URLs: List[str]) -> pd.DataFrame:
+def process_orbit_scene_tile_URLs(
+        URLs: List[str],
+        orbit: int = None,
+        scene: int = None) -> pd.DataFrame:
     records = []
 
     for URL in URLs:
@@ -64,5 +67,11 @@ def process_orbit_scene_tile_URLs(URLs: List[str]) -> pd.DataFrame:
         "filename", 
         "URL"
     ])
+
+    if orbit is not None:
+        df = df[df['orbit'] == orbit]
+
+    if scene is not None:
+        df = df[df['scene'] == scene]
 
     return df

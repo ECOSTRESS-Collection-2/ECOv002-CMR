@@ -17,7 +17,9 @@ def ECOSTRESS_CMR_search(
         product: str, 
         tile: str, 
         start_date: Union[date, str], 
-        end_date: Union[date, str],
+        end_date: Union[date, str] = None,
+        orbit: int = None,
+        scene: int = None,
         CMR_search_URL: str = CMR_SEARCH_URL) -> pd.DataFrame:
     """
     Searches the CMR API for ECOSTRESS granules and constructs a DataFrame with granule information.
@@ -69,7 +71,9 @@ def ECOSTRESS_CMR_search(
     if isinstance(start_date, str):
         start_date = parser.parse(start_date).date()
 
-    if isinstance(end_date, str):
+    if end_date is None:
+        end_date = start_date
+    elif isinstance(end_date, str):
         end_date = parser.parse(end_date).date()
 
     if product not in CONCEPT_IDS:
@@ -79,7 +83,11 @@ def ECOSTRESS_CMR_search(
 
     # Get the URLs of ECOSTRESS granules using the helper function
     URLs = ECOSTRESS_CMR_search_links(
-        concept_ID, tile, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"), CMR_search_URL
+        concept_ID=concept_ID, 
+        tile=tile, 
+        start_date=start_date.strftime("%Y-%m-%d"), 
+        end_date=end_date.strftime("%Y-%m-%d"), 
+        CMR_search_URL=CMR_search_URL
     )
 
     # records = []
@@ -146,6 +154,10 @@ def ECOSTRESS_CMR_search(
     if product == "L2T_STARS":
         df = process_tile_URLs(URLs)
     else:
-        df = process_orbit_scene_tile_URLs(URLs)
+        df = process_orbit_scene_tile_URLs(
+            URLs=URLs,
+            orbit=orbit,
+            scene=scene
+        )
 
     return df

@@ -51,7 +51,9 @@ def ECOSTRESS_CMR_search_links(
     if isinstance(start_date, str):
         start_date = parser.parse(start_date).date()
 
-    if isinstance(end_date, str):
+    if end_date is None:
+        end_date = start_date
+    elif isinstance(end_date, str):
         end_date = parser.parse(end_date).date()
 
     # Get the centroid coordinates of the Sentinel-2 tile
