@@ -16,7 +16,9 @@ classifiers = [
 ]
 dependencies = [
     "colored-logging",
+    "numpy",
     "pandas",
+    "rasters",
     "requests",
     "sentinel-tiles"
 ]
