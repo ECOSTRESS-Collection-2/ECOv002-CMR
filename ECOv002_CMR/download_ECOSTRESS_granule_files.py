@@ -7,6 +7,7 @@ import pandas as pd
 from .constants import *
 from .granule_ID import GranuleID
 from .download_file import download_file
+from .ECOSTRESS_CMR_search import ECOSTRESS_CMR_search
 
 def get_granule_from_listing(listing: pd.DataFrame) -> GranuleID:
     granule_IDs = list(listing.granule.unique())

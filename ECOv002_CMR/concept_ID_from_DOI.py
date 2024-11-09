@@ -1,6 +1,9 @@
 import requests
+import logging
 
 from .constants import *
+
+logger = logging.getLogger(__name__)
 
 def concept_ID_from_DOI(
         DOI: str,
@@ -21,6 +24,11 @@ def concept_ID_from_DOI(
     if response.status_code != 200:
         raise ValueError(f"Error: {response.status_code} - {response.text}")
 
-    concept_ID = response.json()['feed']['entry'][0]['id']
+    try:
+        concept_ID = response.json()['feed']['entry'][0]['id']
+    except Exception as e:
+        logger.exception(e)
+        logger.error(response.text)
+        raise ValueError(f"Error: Could not find concept ID for DOI: {DOI}")
 
     return concept_ID
