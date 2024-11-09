@@ -41,7 +41,7 @@ def interpret_ECOSTRESS_URLs(
             "scene": granule_ID.scene, 
             "tile": granule_ID.tile, 
             "type": type,
-            "granule": granule_ID,
+            "granule": str(granule_ID),
             "filename": filename,
             "URL": URL
         })
