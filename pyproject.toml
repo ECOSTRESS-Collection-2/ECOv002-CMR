@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ECOv002_CMR"
-version = "1.0.2"
+version = "1.0.3"
 description = "Common Metadata Repository (CMR) Search for ECOSTRESS Collection 2"
 readme = "README.md"
 authors = [
@@ -36,7 +36,7 @@ dev = [
 ECOv002_CMR = ["*.txt"]
 
 [project.urls]
-"Homepage" = "https://github.com/ECOSTRESS-Collection-2/ECOv002_CMR"
+"Homepage" = "https://github.com/ECOSTRESS-Collection-2/ECOv002-CMR"
 
 [tool.setuptools.packages.find]
 include = ["ECOv002_CMR"]
