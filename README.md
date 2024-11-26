@@ -1,5 +1,7 @@
 # Common Metadata Repository (CMR) Search for ECOSTRESS Collection 2
 
+![CI](https://github.com/ECOSTRESS-Collection-2/ECOv002-CMR/actions/workflows/ci.yml/badge.svg)
+
 The `ECOv002-CMR` Python package is a utility for searching and downloading ECOSTRESS Collection 2 tiled data product granules using the [Common Metadata Repository (CMR) API](https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html).
 
 [Gregory H. Halverson](https://github.com/gregory-halverson-jpl) (they/them)<br>
