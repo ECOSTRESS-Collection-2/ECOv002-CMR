@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ECOv002_CMR"
-version = "1.0.4"
+version = "1.0.5"
 description = "Common Metadata Repository (CMR) Search for ECOSTRESS Collection 2"
 readme = "README.md"
 authors = [
@@ -24,7 +24,7 @@ dependencies = [
     "sentinel-tiles"
 ]
 
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
 [project.optional-dependencies]
 dev = [
