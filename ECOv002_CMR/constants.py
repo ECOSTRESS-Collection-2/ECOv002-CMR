@@ -1,3 +1,7 @@
+from os.path import join
+
+DOWNLOAD_DIRECTORY = join("~", "data", "ECOSTRESS")
+
 CMR_SEARCH_URL = "https://cmr.earthdata.nasa.gov/search/"
 
 # L1CT RAD concept ID isn't showing up on CMR

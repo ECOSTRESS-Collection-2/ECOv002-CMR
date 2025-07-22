@@ -17,7 +17,7 @@ def download_ECOSTRESS_granule(
         aquisition_date: Union[date, str], 
         orbit: int = None,
         scene: int = None,
-        parent_directory: str = ".",
+        parent_directory: str = DOWNLOAD_DIRECTORY,
         CMR_file_listing_df: pd.DataFrame = None,
         CMR_search_URL: str = CMR_SEARCH_URL) -> ECOSTRESSGranule:
     """
