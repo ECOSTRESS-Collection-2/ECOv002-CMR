@@ -33,3 +33,22 @@ Import the `ECOv002_CMR` package, with an underscore in the name:
 ```
 import ECOv002_CMR
 ```
+
+### Download an ECOSTRESS Granule
+
+Use the `download_ECOSTRESS_granule` function to download a granule by specifying the product, tile, and acquisition date (optionally orbit and scene):
+
+```python
+from ECOv002_CMR import download_ECOSTRESS_granule
+from datetime import date
+
+# Example: Download an ECOSTRESS granule
+granule = download_ECOSTRESS_granule(
+    product="ECO2LSTE.002",
+    tile="10UEV",
+    aquisition_date=date(2023, 8, 1)
+)
+
+# The returned object is an ECOSTRESSGranule instance
+print(granule)
+```
