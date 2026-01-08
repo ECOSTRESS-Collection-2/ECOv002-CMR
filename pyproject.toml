@@ -19,9 +19,9 @@ dependencies = [
     "ECOv002-granules",
     "numpy",
     "pandas",
-    "rasters>=1.3.6",
+    "rasters>=1.16.1",
     "requests",
-    "sentinel-tiles",
+    "sentinel-tiles>=1.1.1",
     "tqdm"
 ]
 
@@ -36,9 +36,6 @@ dev = [
     "pytest",
     "twine"
 ]
-
-[tool.setuptools.package-data]
-ECOv002_CMR = ["*.txt"]
 
 [project.urls]
 "Homepage" = "https://github.com/ECOSTRESS-Collection-2/ECOv002-CMR"
