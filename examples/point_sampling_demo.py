@@ -144,7 +144,10 @@ def find_sentinel2_tile(lon, lat):
 # Configuration
 TARGET_LON = -118.2437  # Downtown LA longitude
 TARGET_LAT = 34.0522    # Downtown LA latitude
-PRODUCT = "L2T_LSTE"    # Land Surface Temperature & Emissivity
+PRODUCTS = {
+    "L2T_LSTE": "LST",      # Land Surface Temperature
+    "L2T_STARS": ["NDVI", "Albedo"]  # NDVI and Albedo from STARS (tiled)
+}
 START_DATE = date(2025, 6, 1)
 END_DATE = date(2025, 6, 30)
 
@@ -152,7 +155,7 @@ print("=" * 80)
 print("ECOSTRESS POINT SAMPLING DEMONSTRATION")
 print("=" * 80)
 print(f"\nTarget coordinate: {TARGET_LAT:.6f}°N, {TARGET_LON:.6f}°W")
-print(f"Product: {PRODUCT}")
+print(f"Products: {', '.join(PRODUCTS.keys())}")
 print(f"Time period: {START_DATE} to {END_DATE}\n")
 
 # Find Sentinel-2 tile containing the point
@@ -166,86 +169,112 @@ print(f"✓ Sentinel-2 tile: {tile}\n")
 # Set up authentication
 session = setup_earthdata_session()
 
-# Search CMR for granules in the tile
-print(f"Searching NASA CMR for {PRODUCT} granules in tile {tile}...")
-search_results = ECOSTRESS_CMR_search(
-    product=PRODUCT,
-    tile=tile,
-    start_date=START_DATE,
-    end_date=END_DATE
-)
+# Search CMR for all products and collect files by granule
+print("Searching NASA CMR for ECOSTRESS granules...")
+all_files = {}  # Dictionary to store files by (granule, variable)
 
-if search_results.empty:
-    print(f"No {PRODUCT} granules found for tile {tile} in the specified time period.")
-    sys.exit(0)
+for product, variables in PRODUCTS.items():
+    if not isinstance(variables, list):
+        variables = [variables]
+    
+    print(f"  Searching {product}...")
+    search_results = ECOSTRESS_CMR_search(
+        product=product,
+        tile=tile,
+        start_date=START_DATE,
+        end_date=END_DATE
+    )
+    
+    if search_results.empty:
+        print(f"  ⚠ No {product} granules found")
+        continue
+    
+    # Filter to desired variables
+    for variable in variables:
+        var_files = search_results[
+            (search_results['type'] == 'GeoTIFF Data') & 
+            (search_results['variable'] == variable)
+        ].copy()
+        
+        if not var_files.empty:
+            print(f"    Found {len(var_files)} {variable} files")
+            for idx, row in var_files.iterrows():
+                key = (row['granule'], variable)
+                all_files[key] = {
+                    'url': row['URL'],
+                    'orbit': row['orbit'],
+                    'scene': row['scene'],
+                    'product': product
+                }
 
-print(f"Found {len(search_results)} files across multiple granules\n")
-
-# Filter to LST variable only (the main temperature product)
-lst_files = search_results[
-    (search_results['type'] == 'GeoTIFF Data') & 
-    (search_results['variable'] == 'LST')
-].copy()
-
-if lst_files.empty:
-    print("No LST (Land Surface Temperature) files found.")
-    sys.exit(0)
-
-print(f"Found {len(lst_files)} LST files to check\n")
-print("Checking which granules contain the target coordinate...")
+# Identify unique granules across all products
+unique_granules = list(set(granule for granule, _ in all_files.keys()))
+print(f"\nFound {len(unique_granules)} unique granules across all products")
+print(f"Checking which granules contain the target coordinate...")
 print("(This samples from each file to determine coverage)\n")
 
-# Sample each LST file, checking if it contains the target point
+# Check each granule
 results = []
 granules_checked = set()
-granules_with_data = set()
 
-for idx, row in lst_files.iterrows():
-    granule = row['granule']
-    orbit = row['orbit']
-    scene = row['scene']
-    url = row['URL']
+for granule in unique_granules:
+    granules_checked.add(granule)
+    print(f"  Checking granule {len(granules_checked)}/{len(unique_granules)}: {granule}")
     
-    # Track progress
-    if granule not in granules_checked:
-        granules_checked.add(granule)
-        print(f"  Checking granule {len(granules_checked)}/{len(lst_files)}: {granule}", end="")
+    # Collect all variables for this granule
+    granule_data = {
+        'granule': granule,
+        'lon': TARGET_LON,
+        'lat': TARGET_LAT
+    }
     
-    # Check if point is in this raster and get value
-    value, meta = check_point_in_raster(session, url, TARGET_LON, TARGET_LAT)
+    # Extract orbit, scene, timestamp from granule name
+    # Format: ECOv002_L2T_LSTE_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
+    # or: ECOv002_L2_STARS_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
+    parts = granule.split('_')
+    if len(parts) > 6:
+        granule_data['orbit'] = parts[3]
+        granule_data['scene'] = parts[4]
+        granule_data['timestamp'] = parts[6]
     
-    if value is not None:
-        # Extract timestamp from granule name
-        # Format: ECOv002_L2T_LSTE_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
-        parts = granule.split('_')
-        timestamp = parts[6] if len(parts) > 6 else "unknown"
+    has_data = False
+    
+    # Check each variable for this granule
+    for variable in ['LST', 'NDVI', 'Albedo']:
+        key = (granule, variable)
+        if key not in all_files:
+            continue
         
-        # Convert Kelvin to Celsius if value is in Kelvin range
-        value_celsius = value - 273.15 if value > 200 else value
+        file_info = all_files[key]
+        value, meta = check_point_in_raster(session, file_info['url'], TARGET_LON, TARGET_LAT)
         
-        results.append({
-            'timestamp': timestamp,
-            'granule': granule,
-            'orbit': orbit,
-            'scene': scene,
-            'LST_kelvin': round(value, 2),
-            'LST_celsius': round(value_celsius, 2),
-            'lon': TARGET_LON,
-            'lat': TARGET_LAT
-        })
-        
-        granules_with_data.add(granule)
-        print(f" ✓ {value:.2f} K ({value_celsius:.2f}°C)")
-    else:
-        if meta == "outside_bounds":
-            print(f" - (outside swath)")
-        elif meta == "nodata":
-            print(f" - (no data)")
+        if value is not None:
+            has_data = True
+            if variable == 'LST':
+                # Convert Kelvin to Celsius if value is in Kelvin range
+                value_celsius = value - 273.15 if value > 200 else value
+                granule_data['LST_kelvin'] = round(value, 2)
+                granule_data['LST_celsius'] = round(value_celsius, 2)
+                print(f"    LST: {value:.2f} K ({value_celsius:.2f}°C)")
+            elif variable == 'NDVI':
+                granule_data['NDVI'] = round(value, 4)
+                print(f"    NDVI: {value:.4f}")
+            elif variable == 'Albedo':
+                granule_data['Albedo'] = round(value, 4)
+                print(f"    Albedo: {value:.4f}")
         else:
-            print(f" - ({meta})")
+            if meta == "outside_bounds":
+                print(f"    {variable}: outside swath")
+            elif meta == "nodata":
+                print(f"    {variable}: no data")
+            else:
+                print(f"    {variable}: {meta}")
+    
+    if has_data:
+        results.append(granule_data)
 
 print(f"\n✓ Found {len(results)} observations at target coordinate")
-print(f"  ({len(granules_with_data)} granules contain the point)\n")
+print(f"  ({len(results)} granules contain the point)\n")
 
 # Display and save results
 if results:
@@ -255,29 +284,55 @@ if results:
     print("=" * 80)
     print("RESULTS")
     print("=" * 80)
-    print(df[['timestamp', 'orbit', 'scene', 'LST_kelvin', 'LST_celsius']].to_string(index=False))
+    
+    # Display columns dynamically based on what's available
+    display_cols = ['timestamp', 'orbit', 'scene']
+    if 'LST_celsius' in df.columns:
+        display_cols.extend(['LST_kelvin', 'LST_celsius'])
+    if 'NDVI' in df.columns:
+        display_cols.append('NDVI')
+    if 'Albedo' in df.columns:
+        display_cols.append('Albedo')
+    
+    print(df[display_cols].to_string(index=False))
     
     print("\n" + "=" * 80)
     print("STATISTICS")
     print("=" * 80)
     print(f"Number of observations: {len(df)}")
     print(f"Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
-    print(f"\nLand Surface Temperature:")
-    print(f"  Mean: {df['LST_celsius'].mean():.2f}°C ({df['LST_kelvin'].mean():.2f} K)")
-    print(f"  Min:  {df['LST_celsius'].min():.2f}°C ({df['LST_kelvin'].min():.2f} K)")
-    print(f"  Max:  {df['LST_celsius'].max():.2f}°C ({df['LST_kelvin'].max():.2f} K)")
-    print(f"  Std:  {df['LST_celsius'].std():.2f}°C ({df['LST_kelvin'].std():.2f} K)")
+    
+    if 'LST_celsius' in df.columns:
+        print(f"\nLand Surface Temperature:")
+        print(f"  Mean: {df['LST_celsius'].mean():.2f}°C ({df['LST_kelvin'].mean():.2f} K)")
+        print(f"  Min:  {df['LST_celsius'].min():.2f}°C ({df['LST_kelvin'].min():.2f} K)")
+        print(f"  Max:  {df['LST_celsius'].max():.2f}°C ({df['LST_kelvin'].max():.2f} K)")
+        print(f"  Std:  {df['LST_celsius'].std():.2f}°C ({df['LST_kelvin'].std():.2f} K)")
+    
+    if 'NDVI' in df.columns:
+        print(f"\nNDVI (Normalized Difference Vegetation Index):")
+        print(f"  Mean: {df['NDVI'].mean():.4f}")
+        print(f"  Min:  {df['NDVI'].min():.4f}")
+        print(f"  Max:  {df['NDVI'].max():.4f}")
+        print(f"  Std:  {df['NDVI'].std():.4f}")
+    
+    if 'Albedo' in df.columns:
+        print(f"\nAlbedo:")
+        print(f"  Mean: {df['Albedo'].mean():.4f}")
+        print(f"  Min:  {df['Albedo'].min():.4f}")
+        print(f"  Max:  {df['Albedo'].max():.4f}")
+        print(f"  Std:  {df['Albedo'].std():.4f}")
     
     # Save to CSV
-    output_file = f"ecostress_LST_{tile}_{START_DATE}_{END_DATE}.csv"
+    output_file = f"ecostress_multivar_{tile}_{START_DATE}_{END_DATE}.csv"
     df.to_csv(output_file, index=False)
     print(f"\n✓ Results saved to: {output_file}")
     
     print("\n" + "=" * 80)
     print("SUCCESS")
     print("=" * 80)
-    print(f"Successfully sampled ECOSTRESS LST at {TARGET_LAT:.6f}°N, {TARGET_LON:.6f}°W")
-    print(f"for {len(df)} observations in June 2025.")
+    print(f"Successfully sampled ECOSTRESS data at {TARGET_LAT:.6f}°N, {TARGET_LON:.6f}°W")
+    print(f"for {len(df)} observations in {START_DATE.strftime('%B %Y')}.")
 else:
     print("=" * 80)
     print("NO DATA FOUND")
