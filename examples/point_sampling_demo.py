@@ -146,7 +146,7 @@ TARGET_LON = -118.2437  # Downtown LA longitude
 TARGET_LAT = 34.0522    # Downtown LA latitude
 PRODUCTS = {
     "L2T_LSTE": "LST",      # Land Surface Temperature
-    "L2T_STARS": ["NDVI", "Albedo"]  # NDVI and Albedo from STARS (tiled)
+    "L2T_STARS": ["NDVI", "albedo"]  # NDVI and Albedo from STARS (tiled)
 }
 START_DATE = date(2025, 6, 1)
 END_DATE = date(2025, 6, 30)
@@ -229,18 +229,29 @@ for granule in unique_granules:
     }
     
     # Extract orbit, scene, timestamp from granule name
-    # Format: ECOv002_L2T_LSTE_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
-    # or: ECOv002_L2_STARS_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
+    # Different formats for different products:
+    # L2T_LSTE: ECOv002_L2T_LSTE_<orbit>_<scene>_<tile>_<timestamp>_<version>_<build>
+    # L2T_STARS: ECOv002_L2T_STARS_<tile>_<date>_<version>_<build>
     parts = granule.split('_')
-    if len(parts) > 6:
-        granule_data['orbit'] = parts[3]
-        granule_data['scene'] = parts[4]
-        granule_data['timestamp'] = parts[6]
+    product = "_".join(parts[1:3])  # Extract product name (e.g., "L2T_LSTE" or "L2T_STARS")
+    
+    if product == "L2T_STARS":
+        # STARS format: no orbit/scene, organized by tile and date
+        if len(parts) > 4:
+            granule_data['orbit'] = None
+            granule_data['scene'] = None
+            granule_data['timestamp'] = parts[4]  # Date in YYYYMMDD format
+    else:
+        # LSTE and other products: have orbit, scene, and timestamp
+        if len(parts) > 6:
+            granule_data['orbit'] = parts[3]
+            granule_data['scene'] = parts[4]
+            granule_data['timestamp'] = parts[6]
     
     has_data = False
     
     # Check each variable for this granule
-    for variable in ['LST', 'NDVI', 'Albedo']:
+    for variable in ['LST', 'NDVI', 'albedo']:
         key = (granule, variable)
         if key not in all_files:
             continue
@@ -259,16 +270,17 @@ for granule in unique_granules:
             elif variable == 'NDVI':
                 granule_data['NDVI'] = round(value, 4)
                 print(f"    NDVI: {value:.4f}")
-            elif variable == 'Albedo':
+            elif variable == 'albedo':
                 granule_data['Albedo'] = round(value, 4)
                 print(f"    Albedo: {value:.4f}")
         else:
+            display_var = 'Albedo' if variable == 'albedo' else variable
             if meta == "outside_bounds":
-                print(f"    {variable}: outside swath")
+                print(f"    {display_var}: outside swath")
             elif meta == "nodata":
-                print(f"    {variable}: no data")
+                print(f"    {display_var}: no data")
             else:
-                print(f"    {variable}: {meta}")
+                print(f"    {display_var}: {meta}")
     
     if has_data:
         results.append(granule_data)
