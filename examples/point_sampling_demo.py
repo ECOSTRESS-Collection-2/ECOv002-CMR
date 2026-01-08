@@ -19,7 +19,10 @@ import rasterio
 from rasterio.io import MemoryFile
 from rasterio.windows import Window
 from rasterio.errors import RasterioIOError
+from rasterio.warp import transform_bounds
+from rasterio.crs import CRS
 from sentinel_tiles import sentinel_tiles
+from shapely.geometry import Point
 from ECOv002_CMR import ECOSTRESS_CMR_search
 
 def setup_earthdata_session():
@@ -66,15 +69,37 @@ def check_point_in_raster(session, url, lon, lat, max_retries=2):
             
             with MemoryFile(response.content) as memfile:
                 with memfile.open() as src:
-                    # Check if point is within bounds
-                    bounds = src.bounds
-                    if not (bounds.left <= lon <= bounds.right and 
-                           bounds.bottom <= lat <= bounds.top):
+                    # Transform bounds to WGS84 for comparison with input lon/lat
+                    bounds_wgs84 = transform_bounds(
+                        src.crs, 
+                        CRS.from_epsg(4326), 
+                        src.bounds.left, 
+                        src.bounds.bottom, 
+                        src.bounds.right, 
+                        src.bounds.top
+                    )
+                    
+                    # Check if point is within bounds (both in WGS84)
+                    if not (bounds_wgs84[0] <= lon <= bounds_wgs84[2] and 
+                           bounds_wgs84[1] <= lat <= bounds_wgs84[3]):
                         return None, "outside_bounds"
                     
-                    # Get pixel coordinates
+                    # Transform point from WGS84 to raster CRS for pixel indexing
                     try:
-                        py, px = src.index(lon, lat)
+                        from rasterio.warp import transform
+                        xs, ys = transform(
+                            CRS.from_epsg(4326),
+                            src.crs,
+                            [lon],
+                            [lat]
+                        )
+                        x_proj, y_proj = xs[0], ys[0]
+                    except:
+                        return None, "coordinate_transform_error"
+                    
+                    # Get pixel coordinates using transformed coordinates
+                    try:
+                        py, px = src.index(x_proj, y_proj)
                     except:
                         return None, "coordinate_error"
                     
@@ -92,7 +117,7 @@ def check_point_in_raster(session, url, lon, lat, max_retries=2):
                         return None, "nodata"
                     
                     return value, {
-                        'bounds': bounds,
+                        'bounds': bounds_wgs84,  # Corrected to use transformed bounds
                         'crs': str(src.crs),
                         'nodata': nodata
                     }
@@ -109,10 +134,9 @@ def check_point_in_raster(session, url, lon, lat, max_retries=2):
 def find_sentinel2_tile(lon, lat):
     """Find which Sentinel-2 tile contains the given coordinate."""
     try:
-        # Convert lat/lon to MGRS coordinates and extract tile name (first 5 chars)
-        # Format: grid zone (2 digits) + latitude band (1 letter) + 100km square (2 letters)
-        mgrs = sentinel_tiles.toMGRS(lat, lon)
-        tile_name = mgrs[:5]
+        # Use nearest method with a Shapely Point to find the closest tile
+        point = Point(lon, lat)
+        tile_name = sentinel_tiles.nearest(point)
         return tile_name
     except:
         return None
