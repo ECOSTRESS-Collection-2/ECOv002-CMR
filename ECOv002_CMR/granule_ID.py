@@ -33,18 +33,53 @@ class GranuleID:
             self._parse_granule_ID()
 
     def _parse_granule_ID(self):
+        """
+        Parse orbit, scene, and tile information from a standard ECOSTRESS granule ID.
+        
+        Extracts orbit number, scene number, and tile identifier from the granule ID
+        by splitting on underscores and parsing the appropriate segments.
+        """
         self.orbit = int(self.granule_ID.split("_")[3])
         self.scene = int(self.granule_ID.split("_")[4])
         self.tile = self.granule_ID.split("_")[5]
 
     def _parse_STARS_granule_ID(self):
+        """
+        Parse tile information from an ECOSTRESS L2T_STARS granule ID.
+        
+        STARS products have a different granule ID structure and only require
+        extracting the tile identifier.
+        """
         self.tile = self.granule_ID.split("_")[3]
 
     def __str__(self) -> str:
+        """
+        Return string representation of the granule ID.
+        
+        Returns:
+            The granule identifier string.
+        """
         return self.granule_ID
 
     def __repr__(self) -> str:
+        """
+        Return official string representation of the granule ID.
+        
+        Returns:
+            The granule identifier string.
+        """
         return self.granule_ID
     
     def __getattr__(self, attr):
+        """
+        Delegate attribute access to the underlying granule_ID string.
+        
+        Allows GranuleID objects to respond to string methods like split, replace, etc.
+        
+        Args:
+            attr: The attribute name to access.
+            
+        Returns:
+            The attribute from the granule_ID string.
+        """
         return getattr(self.granule_ID, attr)
