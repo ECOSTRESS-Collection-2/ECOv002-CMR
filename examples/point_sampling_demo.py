@@ -109,7 +109,10 @@ def check_point_in_raster(session, url, lon, lat, max_retries=2):
 def find_sentinel2_tile(lon, lat):
     """Find which Sentinel-2 tile contains the given coordinate."""
     try:
-        tile_name = sentinel_tiles.tile_name_from_point(lon, lat)
+        # Convert lat/lon to MGRS coordinates and extract tile name (first 5 chars)
+        # Format: grid zone (2 digits) + latitude band (1 letter) + 100km square (2 letters)
+        mgrs = sentinel_tiles.toMGRS(lat, lon)
+        tile_name = mgrs[:5]
         return tile_name
     except:
         return None
