@@ -10,6 +10,41 @@ def interpret_ECOSTRESS_URLs(
         URLs: List[str],
         orbit: int = None,
         scene: int = None) -> pd.DataFrame:
+    """
+    Parse and organize ECOSTRESS file URLs into a structured DataFrame.
+    
+    This function extracts metadata from ECOSTRESS granule file URLs including
+    product names, variable names, orbit/scene/tile identifiers, and file types.
+    Results can be optionally filtered by orbit and scene numbers.
+    
+    Parameters
+    ----------
+    URLs : List[str]
+        List of ECOSTRESS granule file URLs to interpret.
+    orbit : int, optional
+        If provided, filter results to only include this orbit number.
+    scene : int, optional
+        If provided, filter results to only include this scene number.
+    
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns:
+        - product: ECOSTRESS product name
+        - variable: Variable name (for data files)
+        - orbit: Orbit number
+        - scene: Scene number
+        - tile: Tile identifier
+        - type: File type (JSON Metadata, GeoTIFF Data, GeoJPEG Preview, or GeoJPEG Metadata)
+        - granule: Full granule identifier string
+        - filename: Base filename
+        - URL: Full URL
+    
+    Raises
+    ------
+    ValueError
+        If a URL contains a filename with an unrecognized file extension.
+    """
     records = []
 
     for URL in URLs:

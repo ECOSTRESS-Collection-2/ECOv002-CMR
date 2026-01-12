@@ -1,3 +1,6 @@
+# Define the default Python version as a constant
+PYTHON_VERSION = 3.13
+
 .PHONY: dist
 
 PACKAGE_NAME = ECOv002-CMR
@@ -40,7 +43,9 @@ reinstall:
 	make install
 
 environment:
-	mamba create -y -n $(ENVIRONMENT_NAME) -c conda-forge python=3.10
+	mamba create -y -n $(ENVIRONMENT_NAME) -c conda-forge python=$(PYTHON_VERSION)
+	@echo "Python version set to $(PYTHON_VERSION)"
+	@source activate $(ENVIRONMENT_NAME) && python --version
 
 colima-start:
 	colima start -m 16 -a x86_64 -d 100 
