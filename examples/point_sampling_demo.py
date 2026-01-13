@@ -288,63 +288,84 @@ for granule in unique_granules:
 print(f"\n✓ Found {len(results)} observations at target coordinate")
 print(f"  ({len(results)} granules contain the point)\n")
 
-# Display and save results
+# Combine LST observations with daily NDVI and Albedo
 if results:
     df = pd.DataFrame(results)
     df = df.sort_values('timestamp')
+
+    # Separate instantaneous observations (LST) and daily estimates (NDVI, Albedo)
+    lst_df = df[df['timestamp'].str.contains('T')].copy()  # Instantaneous observations
+    daily_df = df[~df['timestamp'].str.contains('T')].copy()  # Daily estimates
+
+    # Create a lookup dictionary for NDVI and Albedo by date
+    daily_lookup = {}
+    for idx, row in daily_df.iterrows():
+        date = row['timestamp']
+        daily_lookup[date] = {
+            'NDVI': row.get('NDVI', None),
+            'Albedo': row.get('Albedo', None)
+        }
+
+    # Add NDVI and Albedo to each instantaneous observation based on date
+    lst_df['date'] = lst_df['timestamp'].str[:8]
+    lst_df['NDVI'] = lst_df['date'].map(lambda d: daily_lookup.get(d, {}).get('NDVI', None))
+    lst_df['Albedo'] = lst_df['date'].map(lambda d: daily_lookup.get(d, {}).get('Albedo', None))
     
+    # Drop the temporary date column
+    merged_df = lst_df.drop(columns=['date'])
+
     print("=" * 80)
     print("RESULTS")
     print("=" * 80)
-    
+
     # Display columns dynamically based on what's available
     display_cols = ['timestamp', 'orbit', 'scene']
-    if 'LST_celsius' in df.columns:
+    if 'LST_celsius' in merged_df.columns:
         display_cols.extend(['LST_kelvin', 'LST_celsius'])
-    if 'NDVI' in df.columns:
+    if 'NDVI' in merged_df.columns:
         display_cols.append('NDVI')
-    if 'Albedo' in df.columns:
+    if 'Albedo' in merged_df.columns:
         display_cols.append('Albedo')
-    
-    print(df[display_cols].to_string(index=False))
-    
+
+    print(merged_df[display_cols].to_string(index=False))
+
     print("\n" + "=" * 80)
     print("STATISTICS")
     print("=" * 80)
-    print(f"Number of observations: {len(df)}")
-    print(f"Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
-    
-    if 'LST_celsius' in df.columns:
+    print(f"Number of observations: {len(merged_df)}")
+    print(f"Date range: {merged_df['timestamp'].min()} to {merged_df['timestamp'].max()}")
+
+    if 'LST_celsius' in merged_df.columns:
         print(f"\nLand Surface Temperature:")
-        print(f"  Mean: {df['LST_celsius'].mean():.2f}°C ({df['LST_kelvin'].mean():.2f} K)")
-        print(f"  Min:  {df['LST_celsius'].min():.2f}°C ({df['LST_kelvin'].min():.2f} K)")
-        print(f"  Max:  {df['LST_celsius'].max():.2f}°C ({df['LST_kelvin'].max():.2f} K)")
-        print(f"  Std:  {df['LST_celsius'].std():.2f}°C ({df['LST_kelvin'].std():.2f} K)")
-    
-    if 'NDVI' in df.columns:
+        print(f"  Mean: {merged_df['LST_celsius'].mean():.2f}°C ({merged_df['LST_kelvin'].mean():.2f} K)")
+        print(f"  Min:  {merged_df['LST_celsius'].min():.2f}°C ({merged_df['LST_kelvin'].min():.2f} K)")
+        print(f"  Max:  {merged_df['LST_celsius'].max():.2f}°C ({merged_df['LST_kelvin'].max():.2f} K)")
+        print(f"  Std:  {merged_df['LST_celsius'].std():.2f}°C ({merged_df['LST_kelvin'].std():.2f} K)")
+
+    if 'NDVI' in merged_df.columns:
         print(f"\nNDVI (Normalized Difference Vegetation Index):")
-        print(f"  Mean: {df['NDVI'].mean():.4f}")
-        print(f"  Min:  {df['NDVI'].min():.4f}")
-        print(f"  Max:  {df['NDVI'].max():.4f}")
-        print(f"  Std:  {df['NDVI'].std():.4f}")
-    
-    if 'Albedo' in df.columns:
+        print(f"  Mean: {merged_df['NDVI'].mean():.4f}")
+        print(f"  Min:  {merged_df['NDVI'].min():.4f}")
+        print(f"  Max:  {merged_df['NDVI'].max():.4f}")
+        print(f"  Std:  {merged_df['NDVI'].std():.4f}")
+
+    if 'Albedo' in merged_df.columns:
         print(f"\nAlbedo:")
-        print(f"  Mean: {df['Albedo'].mean():.4f}")
-        print(f"  Min:  {df['Albedo'].min():.4f}")
-        print(f"  Max:  {df['Albedo'].max():.4f}")
-        print(f"  Std:  {df['Albedo'].std():.4f}")
-    
+        print(f"  Mean: {merged_df['Albedo'].mean():.4f}")
+        print(f"  Min:  {merged_df['Albedo'].min():.4f}")
+        print(f"  Max:  {merged_df['Albedo'].max():.4f}")
+        print(f"  Std:  {merged_df['Albedo'].std():.4f}")
+
     # Save to CSV
     output_file = f"ecostress_multivar_{tile}_{START_DATE}_{END_DATE}.csv"
-    df.to_csv(output_file, index=False)
+    merged_df.to_csv(output_file, index=False)
     print(f"\n✓ Results saved to: {output_file}")
-    
+
     print("\n" + "=" * 80)
     print("SUCCESS")
     print("=" * 80)
     print(f"Successfully sampled ECOSTRESS data at {TARGET_LAT:.6f}°N, {TARGET_LON:.6f}°W")
-    print(f"for {len(df)} observations in {START_DATE.strftime('%B %Y')}.")
+    print(f"for {len(merged_df)} observations in {START_DATE.strftime('%B %Y')}.")
 else:
     print("=" * 80)
     print("NO DATA FOUND")
