@@ -1,8 +1,54 @@
 # ECOSTRESS Examples
 
-## Point Sampling Demo
+This directory contains example scripts demonstrating various ways to work with ECOSTRESS Collection 2 data.
 
-The `point_sampling_demo.py` script demonstrates efficient point sampling from ECOSTRESS Collection 2 Cloud-Optimized GeoTIFFs without downloading entire files.
+## Examples Overview
+
+### 1. Point Sampling Demo (`point_sampling_demo.py`)
+
+Basic demonstration of sampling ECOSTRESS data at a single coordinate across multiple granules and variables.
+
+**Features:**
+- Samples LST, NDVI, and albedo at a single point (Downtown LA)
+- Searches across a date range (June 2025)
+- Demonstrates working with multiple products (L2T_LSTE, L2T_STARS)
+- Shows how to handle instantaneous vs daily data
+
+**Usage:**
+```bash
+python examples/point_sampling_demo.py
+```
+
+### 2. GeoDataFrame Sampling Demo (`geodataframe_sampling_demo.py`)
+
+**Recommended approach:** Shows how to sample all available ECOSTRESS acquisitions within a date range at multiple points.
+
+**Features:**
+- Provide points WITHOUT needing to know acquisition times
+- Searches for all available granules in date range
+- Samples all found acquisitions at each point
+- Returns one row per point-acquisition combination
+- Most efficient for discovering what data is available
+
+**Usage:**
+```bash
+python examples/geodataframe_sampling_demo.py
+```
+
+### 3. CSV to GeoDataFrame Demo (`csv_to_geodataframe_demo.py`)
+
+Complete workflow for loading points from CSV and sampling ECOSTRESS data.
+
+**Features:**
+- Reads site locations from CSV file
+- Converts lat/lon to GeoDataFrame
+- Samples ECOSTRESS variables
+- Exports enriched CSV with sampled values
+
+**Usage:**
+```bash
+python examples/csv_to_geodataframe_demo.py
+```
 
 ### Authentication Required
 
