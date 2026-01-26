@@ -17,29 +17,38 @@ result = sample_points_over_date_range(
     geometry=sites_df.iloc[:3],  # Single row with all metadata
     start_date="2022-06-01",
     end_date="2022-06-20",
+    layers=['ST_C', 'emissivity', 'NDVI', 'albedo', 'Ta_C', 'RH', 'SM']  # Added emissivity, air temp, humidity, soil moisture
 )
 
 print(f"\nResult shape: {result.shape}")
+print(f"Available columns: {result.columns.tolist()}")
 print(f"\n" + "="*80)
-print("RESULTS: Sub-daily LST matched with daily STARS (NDVI/albedo) by date")
+print("RESULTS: Multi-product point sampling")
 print("="*80)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 120)
 pd.set_option('display.precision', 4)
-result_display = result[['timestamp', 'ST_C', 'NDVI', 'albedo']].copy()
-result_display['date'] = result_display['timestamp'].str[:8]
-result_display = result_display[['timestamp', 'date', 'ST_C', 'NDVI', 'albedo']]
+
+# Only show columns that exist
+available_vars = ['timestamp']
+for var in ['ST_C', 'emissivity', 'Ta_C', 'RH', 'SM', 'NDVI', 'albedo']:
+    if var in result.columns:
+        available_vars.append(var)
+
+result_display = result[available_vars].copy()
+if 'timestamp' in result_display.columns:
+    result_display['date'] = result_display['timestamp'].str[:8]
+    result_display = result_display[['timestamp', 'date'] + [c for c in available_vars if c != 'timestamp']]
 print(result_display.to_string(index=False))
 
 print("\n" + "="*80)
 print("DATA AVAILABILITY ANALYSIS")
 print("="*80)
-print(f"LST observations: 4 dates (20220601, 20220602, 20220606, 20220608)")
-print(f"STARS available: 2 dates (20220606, 20220608 only)")
-print(f"\nSTARS coverage: {result['NDVI'].notna().sum()}/{len(result)} = {result['NDVI'].notna().sum()/len(result)*100:.1f}%")
-print(f"\nNote: STARS is a data fusion product but doesn't have daily coverage")
-print(f"in the archive for this time period. The gaps are real data gaps,")
-print(f"not a code issue. Consider:")
-print(f"  • Searching a wider date range to get more STARS granules")
-print(f"  • Using forward/backward fill to interpolate missing dates")
-print(f"  • Checking if newer builds have better temporal coverage")
+print(f"LST (L2T_LSTE) observations: {result['ST_C'].notna().sum()}")
+print(f"Emissivity (L2T_LSTE): {result['emissivity'].notna().sum()} ({result['emissivity'].notna().sum()/len(result)*100:.1f}%)")
+print(f"STARS (L2T_STARS) coverage: {result['NDVI'].notna().sum()} ({result['NDVI'].notna().sum()/len(result)*100:.1f}%)")
+print(f"Air temp (L3T_MET): {result['Ta_C'].notna().sum()} ({result['Ta_C'].notna().sum()/len(result)*100:.1f}%)")
+print(f"Humidity (L3T_MET): {result['RH'].notna().sum()} ({result['RH'].notna().sum()/len(result)*100:.1f}%)")
+print(f"Soil moisture (L3T_SM): {result['SM'].notna().sum()} ({result['SM'].notna().sum()/len(result)*100:.1f}%)")
+print(f"\nNote: Different products have different temporal resolutions and coverage.")
+print(f"L3T products (MET, SM) may have sparser temporal sampling than L2T products.")

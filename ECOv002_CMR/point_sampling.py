@@ -28,15 +28,20 @@ logger = logging.getLogger(__name__)
 
 # Layer name to (product, variable) mapping
 LAYER_MAPPING = {
-    'ST_C': ('L2T_LSTE', 'LST'),           # Surface Temperature in Celsius
+    'ST_C': ('L2T_LSTE', 'LST'),           # Surface Temperature in Celsius (converted from Kelvin)
     'LST': ('L2T_LSTE', 'LST'),            # Land Surface Temperature (Kelvin)
     'LST_err': ('L2T_LSTE', 'LST_err'),    # LST uncertainty
     'QC': ('L2T_LSTE', 'QC'),              # Quality control
+    'emissivity': ('L2T_LSTE', 'EmisWB'),  # Wideband emissivity (alias for EmisWB)
     'EmisWB': ('L2T_LSTE', 'EmisWB'),      # Wideband emissivity
     'NDVI': ('L2T_STARS', 'NDVI'),         # Normalized Difference Vegetation Index
     'EVI': ('L2T_STARS', 'EVI'),           # Enhanced Vegetation Index
     'albedo': ('L2T_STARS', 'albedo'),     # Surface albedo
     'SAVI': ('L2T_STARS', 'SAVI'),         # Soil Adjusted Vegetation Index
+    'Ta_C': ('L3T_MET', 'Ta'),             # Air Temperature in Celsius (native units)
+    'Ta': ('L3T_MET', 'Ta'),               # Air Temperature in Celsius (alias for Ta_C)
+    'RH': ('L3T_MET', 'RH'),               # Relative humidity
+    'SM': ('L3T_SM', 'SM'),                # Soil moisture
 }
 
 DEFAULT_LAYERS = ['ST_C', 'NDVI', 'albedo']
@@ -229,15 +234,20 @@ def sample_points_over_date_range(
     layers : list of str, optional
         Layer names to sample. Defaults to ['ST_C', 'NDVI', 'albedo'].
         Available layers:
-        - 'ST_C': Surface Temperature in Celsius
-        - 'LST': Land Surface Temperature in Kelvin
-        - 'NDVI': Normalized Difference Vegetation Index
-        - 'EVI': Enhanced Vegetation Index
-        - 'albedo': Surface albedo
-        - 'SAVI': Soil Adjusted Vegetation Index
-        - 'QC': Quality control flags
-        - 'LST_err': LST uncertainty
-        - 'EmisWB': Wideband emissivity
+        - 'ST_C': Surface Temperature in Celsius (L2T_LSTE)
+        - 'LST': Land Surface Temperature in Kelvin (L2T_LSTE)
+        - 'LST_err': LST uncertainty (L2T_LSTE)
+        - 'QC': Quality control flags (L2T_LSTE)
+        - 'emissivity': Wideband emissivity (L2T_LSTE) - recommended
+        - 'EmisWB': Wideband emissivity (L2T_LSTE) - alias for emissivity
+        - 'NDVI': Normalized Difference Vegetation Index (L2T_STARS)
+        - 'EVI': Enhanced Vegetation Index (L2T_STARS)
+        - 'albedo': Surface albedo (L2T_STARS)
+        - 'SAVI': Soil Adjusted Vegetation Index (L2T_STARS)
+        - 'Ta_C': Air Temperature in Celsius (L3T_MET) - recommended
+        - 'Ta': Air Temperature in Celsius (L3T_MET) - alias for Ta_C
+        - 'RH': Relative humidity (L3T_MET)
+        - 'SM': Soil moisture (L3T_SM)
     tile : str or list of str, optional
         Sentinel-2 tile name(s). If None, automatically determined from coordinates.
         Can be a single tile ('11SLT') or list of tiles for multiple points.
@@ -418,8 +428,13 @@ def sample_points_over_date_range(
             products[product].append(variable)
         
         # For ST_C, we'll convert from LST (Kelvin) after sampling
+        # For Ta_C/Ta and emissivity/EmisWB, the source is already correct, just rename
         if layer == 'ST_C':
             layer_to_output_name['LST'] = 'ST_C'
+        elif layer in ['Ta_C', 'Ta']:
+            layer_to_output_name['Ta'] = layer  # Rename Ta variable to match requested layer name
+        elif layer in ['emissivity', 'EmisWB']:
+            layer_to_output_name['EmisWB'] = layer  # Rename EmisWB variable to match requested layer name
         else:
             layer_to_output_name[variable] = layer
     
@@ -552,9 +567,10 @@ def sample_points_over_date_range(
         if verbose:
             logger.info(f"  Point {idx} ({lat:.4f}, {lon:.4f}): Sampling {len(granules)} granule(s)")
         
-        # Separate LST and STARS granules, organize by date
+        # Separate LST, STARS, and other daily products (L3T, L4T) by date
         lst_granules = {}  # {date: [(granule, timestamp, orbit, scene), ...]}
         stars_granules = {}  # {date: granule}
+        daily_granules = {}  # {product: {date: granule}} for L3T/L4T products
         
         for granule in granules:
             parts = granule.split('_')
@@ -576,6 +592,16 @@ def sample_points_over_date_range(
                     if date_str not in lst_granules:
                         lst_granules[date_str] = []
                     lst_granules[date_str].append((granule, timestamp, orbit, scene))
+            elif product and (product.startswith('L3T_') or product.startswith('L4T_')):
+                # L3T/L4T products: ECO_L3T_<product>_<orbit>_<scene>_<tile>_<timestamp>_<build>
+                # Similar structure to L2T_LSTE with orbit/scene/tile/timestamp
+                if len(parts) > 6:
+                    timestamp = parts[6]
+                    date_str = timestamp[:8]  # Extract YYYYMMDD from YYYYMMDDTHHMMSS
+                    
+                    if product not in daily_granules:
+                        daily_granules[product] = {}
+                    daily_granules[product][date_str] = granule
         
         # Process LST granules and match with STARS data by date
         for date_str, lst_list in lst_granules.items():
@@ -635,6 +661,27 @@ def sample_points_over_date_range(
                             has_data = True
                             granule_data[variable] = value
                 
+                # Sample L3T/L4T products for this date
+                for product, date_granules in daily_granules.items():
+                    if date_str in date_granules:
+                        product_granule = date_granules[date_str]
+                        for variable in products.get(product, []):
+                            key = (product_granule, variable)
+                            if key not in tile_files:
+                                continue
+                            
+                            file_info = tile_files[key]
+                            value, meta = sample_point_from_url(
+                                session, 
+                                file_info['url'], 
+                                lon, 
+                                lat
+                            )
+                            
+                            if value is not None:
+                                has_data = True
+                                granule_data[variable] = value
+                
                 if has_data:
                     all_results.append(granule_data)
         
@@ -677,6 +724,27 @@ def sample_points_over_date_range(
                     has_data = True
                     granule_data[variable] = value
             
+            # Sample L3T/L4T products for this date
+            for product, date_granules in daily_granules.items():
+                if date_str in date_granules:
+                    product_granule = date_granules[date_str]
+                    for variable in products.get(product, []):
+                        key = (product_granule, variable)
+                        if key not in tile_files:
+                            continue
+                        
+                        file_info = tile_files[key]
+                        value, meta = sample_point_from_url(
+                            session, 
+                            file_info['url'], 
+                            lon, 
+                            lat
+                        )
+                        
+                        if value is not None:
+                            has_data = True
+                            granule_data[variable] = value
+            
             if has_data:
                 all_results.append(granule_data)
     
@@ -697,7 +765,7 @@ def sample_points_over_date_range(
                 if 'LST' not in layers:
                     results_df = results_df.drop(columns=[var_name])
             elif layer_name != var_name:
-                # Rename column
+                # Rename column (no conversion needed for Ta - already Celsius)
                 results_df = results_df.rename(columns={var_name: layer_name})
     
     if verbose:
