@@ -195,7 +195,7 @@ def find_sentinel2_tile(lon: float, lat: float) -> Optional[str]:
 
 
 def sample_points_over_date_range(
-    geometry: Union[gpd.GeoDataFrame, gpd.GeoSeries, List[Point]],
+    geometry: Union[gpd.GeoDataFrame, gpd.GeoSeries, pd.Series, List[Point], Point],
     start_date: Union[date, str],
     end_date: Union[date, str],
     layers: Optional[List[str]] = None,
@@ -213,12 +213,15 @@ def sample_points_over_date_range(
     
     Parameters
     ----------
-    geometry : GeoDataFrame, GeoSeries, or list of Point
+    geometry : GeoDataFrame, GeoSeries, Series, list of Point, or Point
         Point geometries to sample. Can be:
         - GeoDataFrame with point geometries (uses 'geometry' column)
         - GeoSeries of point geometries
+        - pandas Series (single row from GeoDataFrame, with 'geometry' key)
         - List of shapely Point objects
+        - Single shapely Point object
         Must be in or will be converted to EPSG:4326 (WGS84).
+        When a Series is provided, all non-geometry columns are propagated as metadata.
     start_date : date or str
         Start date for searching granules.
     end_date : date or str
@@ -295,8 +298,28 @@ def sample_points_over_date_range(
     ...     geometry=points,
     ...     start_date=date(2025, 6, 1),
     ...     end_date=date(2025, 6, 30),
+    ... )
+    
+    Or use a single point:
+    
+    >>> single_point = Point(-118.24, 34.05)
+    >>> results = sample_points_over_date_range(
+    ...     geometry=single_point,
+    ...     start_date=date(2025, 6, 1),
+    ...     end_date=date(2025, 6, 30),
     ...     layers=['ST_C', 'NDVI', 'EVI']  # Custom layers
     ... )
+    
+    Or use a single row from a GeoDataFrame (metadata will be propagated):
+    
+    >>> # Sample just one site, keeping all its metadata
+    >>> results = sample_points_over_date_range(
+    ...     geometry=gdf.iloc[0],  # Single row with site_id and other columns
+    ...     start_date=date(2025, 6, 1),
+    ...     end_date=date(2025, 6, 30)
+    ... )
+    >>> # Output includes 'site_id' and other columns from the input row
+    >>> print(results[['site_id', 'timestamp', 'ST_C']])
     """
     # Set default layers if not provided
     if layers is None:
@@ -338,6 +361,27 @@ def sample_points_over_date_range(
                 continue
             points_data.append((idx, point, {}))
     
+    elif isinstance(geometry, pd.Series):
+        # Single row from GeoDataFrame (pandas Series with geometry)
+        if 'geometry' not in geometry:
+            raise ValueError("Series must have a 'geometry' key")
+        
+        point = geometry['geometry']
+        if not isinstance(point, Point):
+            raise ValueError(f"Series geometry is not a Point: {type(point)}")
+        
+        # Check if point needs reprojection (if it's a GeoSeries with CRS info)
+        if isinstance(geometry, gpd.GeoSeries) and geometry.crs is not None:
+            if not geometry.crs.equals(CRS.from_epsg(4326)):
+                if verbose:
+                    logger.info(f"Reprojecting point from {geometry.crs} to EPSG:4326")
+                geometry = geometry.to_crs('EPSG:4326')
+                point = geometry['geometry']
+        
+        # Copy all non-geometry columns as metadata
+        metadata = {key: geometry[key] for key in geometry.index if key != 'geometry'}
+        points_data.append((0, point, metadata))
+    
     elif isinstance(geometry, list):
         # List of Point objects
         for idx, point in enumerate(geometry):
@@ -346,9 +390,13 @@ def sample_points_over_date_range(
                 continue
             points_data.append((idx, point, {}))
     
+    elif isinstance(geometry, Point):
+        # Single Point object
+        points_data.append((0, geometry, {}))
+    
     else:
         raise ValueError(
-            "geometry must be a GeoDataFrame, GeoSeries, or list of Point objects"
+            "geometry must be a GeoDataFrame, GeoSeries, Series (single row), list of Point objects, or a single Point"
         )
     
     if not points_data:
@@ -504,30 +552,116 @@ def sample_points_over_date_range(
         if verbose:
             logger.info(f"  Point {idx} ({lat:.4f}, {lon:.4f}): Sampling {len(granules)} granule(s)")
         
+        # Separate LST and STARS granules, organize by date
+        lst_granules = {}  # {date: [(granule, timestamp, orbit, scene), ...]}
+        stars_granules = {}  # {date: granule}
+        
         for granule in granules:
+            parts = granule.split('_')
+            product = "_".join(parts[1:3]) if len(parts) > 2 else None
+            
+            if product == 'L2T_STARS':
+                # STARS granule: ECO_L2T_STARS_<tile>_<date>_<build>
+                if len(parts) > 4:
+                    date_str = parts[4]  # YYYYMMDD
+                    stars_granules[date_str] = granule
+            elif product == 'L2T_LSTE':
+                # LST granule: ECO_L2T_LSTE_<orbit>_<scene>_<tile>_<timestamp>_<build>
+                if len(parts) > 6:
+                    timestamp = parts[6]
+                    date_str = timestamp[:8]  # Extract YYYYMMDD from YYYYMMDDTHHMMSS
+                    orbit = parts[3] if len(parts) > 3 else None
+                    scene = parts[4] if len(parts) > 4 else None
+                    
+                    if date_str not in lst_granules:
+                        lst_granules[date_str] = []
+                    lst_granules[date_str].append((granule, timestamp, orbit, scene))
+        
+        # Process LST granules and match with STARS data by date
+        for date_str, lst_list in lst_granules.items():
+            stars_granule = stars_granules.get(date_str)
+            
+            for granule, timestamp, orbit, scene in lst_list:
+                granule_data = {
+                    'point_index': idx,
+                    'granule': granule,
+                    'lon': lon,
+                    'lat': lat,
+                    'tile': point_tile,
+                    'timestamp': timestamp,
+                    'orbit': orbit,
+                    'scene': scene
+                }
+                
+                # Copy metadata from original input
+                granule_data.update(metadata)
+                
+                has_data = False
+                
+                # Sample LST variables from the LST granule
+                for variable in products.get('L2T_LSTE', []):
+                    key = (granule, variable)
+                    if key not in tile_files:
+                        continue
+                    
+                    file_info = tile_files[key]
+                    value, meta = sample_point_from_url(
+                        session, 
+                        file_info['url'], 
+                        lon, 
+                        lat
+                    )
+                    
+                    if value is not None:
+                        has_data = True
+                        granule_data[variable] = value
+                
+                # Sample STARS variables from the STARS granule for this date
+                if stars_granule:
+                    for variable in products.get('L2T_STARS', []):
+                        key = (stars_granule, variable)
+                        if key not in tile_files:
+                            continue
+                        
+                        file_info = tile_files[key]
+                        value, meta = sample_point_from_url(
+                            session, 
+                            file_info['url'], 
+                            lon, 
+                            lat
+                        )
+                        
+                        if value is not None:
+                            has_data = True
+                            granule_data[variable] = value
+                
+                if has_data:
+                    all_results.append(granule_data)
+        
+        # Also process STARS-only granules (dates with STARS but no LST)
+        stars_only_dates = set(stars_granules.keys()) - set(lst_granules.keys())
+        for date_str in stars_only_dates:
+            stars_granule = stars_granules[date_str]
+            
             granule_data = {
                 'point_index': idx,
-                'granule': granule,
+                'granule': stars_granule,
                 'lon': lon,
                 'lat': lat,
-                'tile': point_tile
+                'tile': point_tile,
+                'timestamp': date_str,
+                'orbit': None,
+                'scene': None
             }
             
             # Copy metadata from original input
             granule_data.update(metadata)
             
-            # Extract timestamp from granule name
-            parts = granule.split('_')
-            if len(parts) > 6:
-                granule_data['timestamp'] = parts[6] if 'T' in parts[6] else parts[4]
-                granule_data['orbit'] = parts[3] if len(parts) > 3 else None
-                granule_data['scene'] = parts[4] if len(parts) > 4 else None
-            
             has_data = False
             
-            # Sample each variable for this granule
-            for variable in [v for product_vars in products.values() for v in product_vars]:
-                key = (granule, variable)
+            # Sample STARS variables
+            for variable in products.get('L2T_STARS', []):
+                key = (stars_granule, variable)
                 if key not in tile_files:
                     continue
                 
