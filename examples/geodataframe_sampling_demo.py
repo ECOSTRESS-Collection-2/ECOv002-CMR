@@ -3,8 +3,8 @@
 Demonstration of batch point sampling for all available acquisitions in a date range.
 
 This script shows how to sample ECOSTRESS data for multiple points across all
-available acquisitions within a time period. This is the recommended approach
-since you don't need to know ECOSTRESS acquisition times in advance.
+available acquisitions within a time period. Uses the new simplified API with
+layer names and automatic temperature conversion.
 
 AUTHENTICATION REQUIRED:
 NASA Earthdata credentials required. Set up via ~/.netrc or environment variables.
@@ -16,7 +16,6 @@ from shapely.geometry import Point
 from ECOv002_CMR import sample_points_over_date_range
 
 # Create sample points across different locations in Los Angeles area
-# Note: No datetime column needed - we just specify the date range
 data = {
     'site_id': ['downtown', 'airport', 'pasadena', 'long_beach'],
     'site_name': ['Downtown LA', 'LAX Airport', 'Pasadena', 'Long Beach'],
@@ -37,23 +36,18 @@ print("=" * 80)
 print(f"\nSampling {len(gdf)} points:\n")
 print(gdf[['site_id', 'site_name']].to_string(index=False))
 
-# Define products and variables to sample
-products = {
-    'L2T_LSTE': 'LST',                    # Land Surface Temperature
-    'L2T_STARS': ['NDVI', 'albedo']      # NDVI and Albedo
-}
-
 # Define date range
 start_date = date(2025, 6, 1)
 end_date = date(2025, 6, 30)
 
 print(f"\nSearching for all ECOSTRESS acquisitions from {start_date} to {end_date}")
+print("Using default layers: ST_C (Surface Temp in Celsius), NDVI, albedo")
 print("=" * 80)
 
 # Sample all points for all available acquisitions in the date range
+# layers defaults to ['ST_C', 'NDVI', 'albedo']
 results = sample_points_over_date_range(
-    gdf=gdf,
-    products=products,
+    geometry=gdf,
     start_date=start_date,
     end_date=end_date,
     verbose=True
@@ -64,14 +58,10 @@ if not results.empty:
     print("RESULTS")
     print("=" * 80)
     
-    # Add temperature conversion if LST is present
-    if 'LST' in results.columns:
-        results['LST_celsius'] = results['LST'] - 273.15
-    
-    # Display results
+    # Display results (ST_C is already in Celsius!)
     display_cols = ['site_id', 'site_name', 'timestamp']
-    if 'LST_celsius' in results.columns:
-        display_cols.append('LST_celsius')
+    if 'ST_C' in results.columns:
+        display_cols.append('ST_C')
     if 'NDVI' in results.columns:
         display_cols.append('NDVI')
     if 'albedo' in results.columns:
@@ -93,12 +83,12 @@ if not results.empty:
     for site, count in site_counts.items():
         print(f"  {site}: {count}")
     
-    if 'LST_celsius' in results.columns:
-        print(f"\nLand Surface Temperature:")
-        print(f"  Mean: {results['LST_celsius'].mean():.2f}°C")
-        print(f"  Min:  {results['LST_celsius'].min():.2f}°C")
-        print(f"  Max:  {results['LST_celsius'].max():.2f}°C")
-        print(f"  Std:  {results['LST_celsius'].std():.2f}°C")
+    if 'ST_C' in results.columns:
+        print(f"\nSurface Temperature (Celsius):")
+        print(f"  Mean: {results['ST_C'].mean():.2f}°C")
+        print(f"  Min:  {results['ST_C'].min():.2f}°C")
+        print(f"  Max:  {results['ST_C'].max():.2f}°C")
+        print(f"  Std:  {results['ST_C'].std():.2f}°C")
     
     if 'NDVI' in results.columns:
         ndvi_data = results['NDVI'].dropna()

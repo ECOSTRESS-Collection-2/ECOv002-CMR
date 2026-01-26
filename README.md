@@ -159,6 +159,15 @@ Or browse the [Sentinel-2 tiling grid](https://sentinels.copernicus.eu/web/senti
 
 ## Point Sampling
 
+Sample ECOSTRESS data at specific geographic points. Choose from two approaches:
+
+1. **Date Range Sampling (Recommended)**: Automatically find and sample all available ECOSTRESS acquisitions in a date range
+2. **Datetime Sampling (Legacy)**: Sample at specific acquisition times if you already know them
+
+### Why Date Range Sampling?
+
+ECOSTRESS acquisition times are not known in advance - they depend on the International Space Station's orbit and imaging schedule. The date range approach searches for all available data and samples it at your points, so you don't need to guess acquisition times.
+
 ### Sample at Single Point
 
 Extract values at specific coordinates from ECOSTRESS rasters:
@@ -204,7 +213,7 @@ else:
 
 ### Batch Sampling for All Available Acquisitions (Recommended)
 
-Sample multiple points across all ECOSTRESS acquisitions in a date range. This is the recommended approach since you don't need to know acquisition times in advance:
+Sample multiple points across all ECOSTRESS acquisitions in a date range with automatic temperature conversion:
 
 ```python
 import geopandas as gpd
@@ -223,27 +232,17 @@ data = {
 }
 gdf = gpd.GeoDataFrame(data, crs='EPSG:4326')
 
-# Define products and variables to sample
-products = {
-    'L2T_LSTE': 'LST',                    # Land Surface Temperature
-    'L2T_STARS': ['NDVI', 'albedo']      # NDVI and Albedo
-}
-
 # Sample all available acquisitions in June 2025
+# Uses default layers: ST_C (surface temp in Celsius), NDVI, albedo
 results = sample_points_over_date_range(
-    gdf=gdf,
-    products=products,
+    geometry=gdf,  # Can also be list of Point objects or GeoSeries
     start_date=date(2025, 6, 1),
-    end_date=date(2025, 6, 30),
-    verbose=True
+    end_date=date(2025, 6, 30)
 )
 
 # Results DataFrame contains all point-acquisition combinations
-# Each row is one observation at one point at one acquisition time
-print(results[['site_id', 'timestamp', 'LST', 'NDVI', 'albedo']])
-
-# Convert temperature to Celsius
-results['LST_celsius'] = results['LST'] - 273.15
+# ST_C is automatically converted from Kelvin to Celsius!
+print(results[['site_id', 'timestamp', 'ST_C', 'NDVI', 'albedo']])
 
 # See how many acquisitions covered each site
 print(results.groupby('site_id').size())
@@ -252,12 +251,43 @@ print(results.groupby('site_id').size())
 results.to_csv('ecostress_samples.csv', index=False)
 ```
 
-The `sample_points_over_date_range` function:
-- Searches for all ECOSTRESS granules in the date range
-- Automatically determines Sentinel-2 tiles from point coordinates
-- Samples all found granules at each point
-- Returns one row per point-acquisition combination
-- Much more efficient than searching by specific datetimes
+**Available layers** (defaults to `['ST_C', 'NDVI', 'albedo']`):
+- `ST_C` - Surface Temperature in Celsius (auto-converted from LST)
+- `LST` - Land Surface Temperature in Kelvin
+- `NDVI` - Normalized Difference Vegetation Index  
+- `EVI` - Enhanced Vegetation Index
+- `albedo` - Surface albedo
+- `SAVI` - Soil Adjusted Vegetation Index
+- `QC` - Quality control flags
+- `LST_err` - LST uncertainty
+- `EmisWB` - Wideband emissivity
+
+**Custom layers example:**
+```python
+# Request specific layers
+results = sample_points_over_date_range(
+    geometry=gdf,
+    start_date=date(2025, 6, 1),
+    end_date=date(2025, 6, 30),
+    layers=['ST_C', 'NDVI', 'EVI', 'QC']  # Custom selection
+)
+```
+
+**Using a list of points (no GeoDataFrame needed):**
+```python
+from shapely.geometry import Point
+
+points = [
+    Point(-118.24, 34.05),
+    Point(-118.41, 33.94),
+    Point(-118.14, 34.15)
+]
+
+results = sample_points_over_date_range(
+    geometry=points,  # Just a list of Point objects!
+    start_date=date(2025, 6, 1),
+    end_date=date(2025, 6, 30)
+)
 
 ### Batch Sampling with Specific Datetimes
 

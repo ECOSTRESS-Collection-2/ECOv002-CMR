@@ -54,12 +54,6 @@ gdf = gdf.drop(columns=['latitude', 'longitude'])
 print("\nConverted to GeoDataFrame:")
 print(gdf.head())
 
-# Define products to sample
-products = {
-    'L2T_LSTE': 'LST',              # Land Surface Temperature
-    'L2T_STARS': ['NDVI', 'albedo'] # NDVI and Albedo
-}
-
 # Define date range to search
 start_date = date(2025, 6, 1)
 end_date = date(2025, 6, 30)
@@ -68,29 +62,25 @@ print("\n" + "=" * 80)
 print("SAMPLING ALL ECOSTRESS ACQUISITIONS")
 print("=" * 80)
 print(f"Date range: {start_date} to {end_date}")
+print("Using default layers: ST_C (Surface Temp in Celsius), NDVI, albedo")
 
 # Sample all available ECOSTRESS acquisitions in the date range
 results = sample_points_over_date_range(
-    gdf=gdf,
-    products=products,
+    geometry=gdf,
     start_date=start_date,
     end_date=end_date,
     verbose=True
 )
 
 if not results.empty:
-    # Add temperature in Celsius
-    if 'LST' in results.columns:
-        results['LST_celsius'] = results['LST'] - 273.15
-    
     print("\n" + "=" * 80)
     print("RESULTS")
     print("=" * 80)
     
-    # Display key columns
+    # Display key columns (ST_C is already in Celsius!)
     display_cols = ['site_id', 'site_name', 'timestamp']
-    if 'LST_celsius' in results.columns:
-        display_cols.append('LST_celsius')
+    if 'ST_C' in results.columns:
+        display_cols.append('ST_C')
     if 'NDVI' in results.columns:
         display_cols.append('NDVI')
     if 'albedo' in results.columns:
@@ -118,8 +108,8 @@ if not results.empty:
     for site, count in site_counts.items():
         print(f"  {site}: {count}")
     
-    if 'LST_celsius' in results.columns:
-        print(f"\nTemperature range: {results['LST_celsius'].min():.1f}°C to {results['LST_celsius'].max():.1f}°C")
+    if 'ST_C' in results.columns:
+        print(f"\nSurface Temperature: {results['ST_C'].min():.1f}°C to {results['ST_C'].max():.1f}°C")
     
 else:
     print("\n⚠ No ECOSTRESS data found for these points and dates")

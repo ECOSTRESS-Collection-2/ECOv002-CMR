@@ -19,12 +19,14 @@ def test_import_point_sampling():
         setup_earthdata_session,
         sample_point_from_url,
         sample_points_from_geodataframe,
+        sample_points_over_date_range,
         find_sentinel2_tile
     )
     
     assert callable(setup_earthdata_session)
     assert callable(sample_point_from_url)
     assert callable(sample_points_from_geodataframe)
+    assert callable(sample_points_over_date_range)
     assert callable(find_sentinel2_tile)
 
 
@@ -86,11 +88,9 @@ def test_sample_points_from_geodataframe_validation():
     }
     gdf = gpd.GeoDataFrame(data)  # No CRS
     
-    products = {'L2T_LSTE': 'LST'}
-    
     # Should raise ValueError for missing CRS
     with pytest.raises(ValueError, match="must have a defined CRS"):
-        sample_points_from_geodataframe(gdf, products)
+        sample_points_from_geodataframe(geometry=gdf)
 
 
 def test_sample_points_from_geodataframe_missing_columns():
@@ -104,10 +104,8 @@ def test_sample_points_from_geodataframe_missing_columns():
     }
     gdf = gpd.GeoDataFrame(data, crs='EPSG:4326')
     
-    products = {'L2T_LSTE': 'LST'}
-    
     with pytest.raises(ValueError, match="Datetime column 'datetime' not found"):
-        sample_points_from_geodataframe(gdf, products)
+        sample_points_from_geodataframe(geometry=gdf)
 
 
 def test_sample_points_from_geodataframe_crs_reprojection():
@@ -122,14 +120,12 @@ def test_sample_points_from_geodataframe_crs_reprojection():
     }
     gdf = gpd.GeoDataFrame(data, crs='EPSG:3857')
     
-    products = {'L2T_LSTE': 'LST'}
-    
     # Mock the search and session to avoid actual network calls
     with patch('ECOv002_CMR.point_sampling.setup_earthdata_session'):
         with patch('ECOv002_CMR.point_sampling.ECOSTRESS_CMR_search') as mock_search:
             mock_search.return_value = pd.DataFrame()  # Empty results
             
-            result = sample_points_from_geodataframe(gdf, products, verbose=False)
+            result = sample_points_from_geodataframe(geometry=gdf, verbose=False)
             
             # Should return empty DataFrame (no data found), but no errors
             assert isinstance(result, pd.DataFrame)
