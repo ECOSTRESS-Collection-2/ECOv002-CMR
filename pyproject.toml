@@ -17,11 +17,14 @@ classifiers = [
 dependencies = [
     "colored-logging",
     "ECOv002-granules",
+    "geopandas",
     "numpy",
     "pandas",
+    "rasterio",
     "rasters>=1.16.1",
     "requests",
     "sentinel-tiles>=1.1.1",
+    "shapely",
     "tqdm"
 ]
 

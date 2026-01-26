@@ -157,6 +157,162 @@ print(f"Tile: {tile}")  # Output: 11SLT
 
 Or browse the [Sentinel-2 tiling grid](https://sentinels.copernicus.eu/web/sentinel/missions/sentinel-2/data-products).
 
+## Point Sampling
+
+### Sample at Single Point
+
+Extract values at specific coordinates from ECOSTRESS rasters:
+
+```python
+from ECOv002_CMR import (
+    setup_earthdata_session,
+    sample_point_from_url,
+    ECOSTRESS_CMR_search
+)
+from datetime import date
+
+# Set up authenticated session
+session = setup_earthdata_session()
+
+# Search for data
+results = ECOSTRESS_CMR_search(
+    product="L2T_LSTE",
+    tile="11SLT",
+    start_date=date(2025, 6, 15)
+)
+
+# Get URL for LST variable
+lst_files = results[
+    (results['type'] == 'GeoTIFF Data') & 
+    (results['variable'] == 'LST')
+]
+url = lst_files.iloc[0]['URL']
+
+# Sample at coordinate (lon, lat in WGS84)
+value, metadata = sample_point_from_url(
+    session=session,
+    url=url,
+    lon=-118.2437,  # Downtown LA
+    lat=34.0522
+)
+
+if value is not None:
+    print(f"LST: {value:.2f} K ({value - 273.15:.2f}°C)")
+else:
+    print(f"Sampling failed: {metadata}")
+```
+
+### Batch Sampling for All Available Acquisitions (Recommended)
+
+Sample multiple points across all ECOSTRESS acquisitions in a date range. This is the recommended approach since you don't need to know acquisition times in advance:
+
+```python
+import geopandas as gpd
+from datetime import date
+from shapely.geometry import Point
+from ECOv002_CMR import sample_points_over_date_range
+
+# Create GeoDataFrame with points (no datetime needed!)
+data = {
+    'site_id': ['site_A', 'site_B', 'site_C'],
+    'geometry': [
+        Point(-118.24, 34.05),   # Downtown LA
+        Point(-118.41, 33.94),   # LAX Airport
+        Point(-118.14, 34.15)    # Pasadena
+    ]
+}
+gdf = gpd.GeoDataFrame(data, crs='EPSG:4326')
+
+# Define products and variables to sample
+products = {
+    'L2T_LSTE': 'LST',                    # Land Surface Temperature
+    'L2T_STARS': ['NDVI', 'albedo']      # NDVI and Albedo
+}
+
+# Sample all available acquisitions in June 2025
+results = sample_points_over_date_range(
+    gdf=gdf,
+    products=products,
+    start_date=date(2025, 6, 1),
+    end_date=date(2025, 6, 30),
+    verbose=True
+)
+
+# Results DataFrame contains all point-acquisition combinations
+# Each row is one observation at one point at one acquisition time
+print(results[['site_id', 'timestamp', 'LST', 'NDVI', 'albedo']])
+
+# Convert temperature to Celsius
+results['LST_celsius'] = results['LST'] - 273.15
+
+# See how many acquisitions covered each site
+print(results.groupby('site_id').size())
+
+# Save results
+results.to_csv('ecostress_samples.csv', index=False)
+```
+
+The `sample_points_over_date_range` function:
+- Searches for all ECOSTRESS granules in the date range
+- Automatically determines Sentinel-2 tiles from point coordinates
+- Samples all found granules at each point
+- Returns one row per point-acquisition combination
+- Much more efficient than searching by specific datetimes
+
+### Batch Sampling with Specific Datetimes
+
+If you do know specific acquisition times you want to sample:
+
+```python
+import geopandas as gpd
+from datetime import datetime
+from shapely.geometry import Point
+from ECOv002_CMR import sample_points_from_geodataframe
+
+# Create GeoDataFrame with points and datetimes
+data = {
+    'site_id': ['site_A', 'site_B', 'site_C'],
+    'datetime': [
+        datetime(2025, 6, 15, 12, 0),
+        datetime(2025, 6, 20, 14, 0),
+        datetime(2025, 6, 25, 10, 0)
+    ],
+    'geometry': [
+        Point(-118.24, 34.05),   # Downtown LA
+        Point(-118.41, 33.94),   # LAX Airport
+        Point(-118.14, 34.15)    # Pasadena
+    ]
+}
+gdf = gpd.GeoDataFrame(data, crs='EPSG:4326')
+
+# Define products and variables to sample
+products = {
+    'L2T_LSTE': 'LST',                    # Land Surface Temperature
+    'L2T_STARS': ['NDVI', 'albedo']      # NDVI and Albedo
+}
+
+# Sample all points
+results = sample_points_from_geodataframe(
+    gdf=gdf,
+    products=products,
+    date_buffer_days=3,  # Search ±3 days around each datetime
+    verbose=True
+)
+
+# Results DataFrame contains sampled values
+print(results[['site_id', 'timestamp', 'LST', 'NDVI', 'albedo']])
+
+# Convert temperature to Celsius
+results['LST_celsius'] = results['LST'] - 273.15
+
+# Save results
+results.to_csv('ecostress_samples.csv', index=False)
+```
+
+This approach uses `date_buffer_days` to search for granules near each specified datetime. Useful when you have specific target times but want to allow some flexibility.
+
+See [examples/geodataframe_sampling_demo.py](examples/geodataframe_sampling_demo.py) for the recommended date-range approach.
+
 ### Working with Multiple Variables
 
 Search across multiple products and combine results:
@@ -193,33 +349,44 @@ for product, variables in products.items():
         print(f"{variable}: {len(var_files)} files")
 ```
 
-### Point Sampling Example
+### Advanced Point Sampling Options
 
-Extract values at specific coordinates:
+### Advanced Point Sampling Options
+
+**Custom tile specification:**
 
 ```python
-import requests
-import rasterio
-from rasterio.io import MemoryFile
+# Pre-specify tiles instead of auto-detecting
+gdf['tile'] = ['11SLT', '11SLT', '11SLT']
 
-# Set up authenticated session
-session = requests.Session()
-session.auth = (username, password)  # From .netrc or env vars
-
-# Get URL from search results
-url = results.iloc[0]['URL']
-
-# Download and read raster
-response = session.get(url, allow_redirects=True)
-with MemoryFile(response.content) as memfile:
-    with memfile.open() as src:
-        # Sample at coordinate
-        lon, lat = -118.2437, 34.0522
-        for val in src.sample([(lon, lat)]):
-            print(f"Value: {val[0]}")
+results = sample_points_from_geodataframe(
+    gdf=gdf,
+    products=products,
+    tile_col='tile'  # Use pre-specified tiles
+)
 ```
 
-See [examples/point_sampling_demo.py](examples/point_sampling_demo.py) for a complete point sampling workflow.
+**Find Sentinel-2 tile for a coordinate:**
+
+```python
+from ECOv002_CMR import find_sentinel2_tile
+
+tile = find_sentinel2_tile(lon=-118.24, lat=34.05)
+print(f"Tile: {tile}")  # Output: 11SLT
+```
+
+**Custom datetime column names:**
+
+```python
+results = sample_points_from_geodataframe(
+    gdf=gdf,
+    products=products,
+    geometry_col='location',  # Custom geometry column
+    datetime_col='timestamp'  # Custom datetime column
+)
+```
+
+See [examples/point_sampling_demo.py](examples/point_sampling_demo.py) for single-point sampling workflow.
 
 ### Date Formats
 
