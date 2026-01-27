@@ -26,19 +26,16 @@ print(f"\n" + "="*80)
 print("RESULTS: Multi-product point sampling")
 print("="*80)
 pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 120)
+pd.set_option('display.width', 200)
 pd.set_option('display.precision', 4)
 
-# Only show columns that exist
-available_vars = ['timestamp']
-for var in ['ST_C', 'emissivity', 'Ta_C', 'RH', 'SM', 'NDVI', 'albedo']:
-    if var in result.columns:
-        available_vars.append(var)
-
-result_display = result[available_vars].copy()
+# Display all columns
+result_display = result.copy()
 if 'timestamp' in result_display.columns:
     result_display['date'] = result_display['timestamp'].str[:8]
-    result_display = result_display[['timestamp', 'date'] + [c for c in available_vars if c != 'timestamp']]
+    # Reorder to put timestamp and date first
+    cols = ['timestamp', 'date'] + [c for c in result_display.columns if c not in ['timestamp', 'date']]
+    result_display = result_display[cols]
 print(result_display.to_string(index=False))
 
 print("\n" + "="*80)
