@@ -3,11 +3,14 @@ from os.path import join
 from datetime import date
 import posixpath
 import pandas as pd
+import logging
 
 from .constants import *
 from .granule_ID import GranuleID
 from .download_file import download_file
 from .ECOSTRESS_CMR_search import ECOSTRESS_CMR_search
+
+logger = logging.getLogger(__name__)
 
 def get_granule_from_listing(listing: pd.DataFrame) -> GranuleID:
     """
@@ -20,16 +23,18 @@ def get_granule_from_listing(listing: pd.DataFrame) -> GranuleID:
         GranuleID: The granule ID extracted from the listing.
 
     Raises:
-        ValueError: If there are not exactly one unique granule ID in the listing.
+        ValueError: If there are no granules in the listing.
     """
     # Extract unique granule IDs from the listing DataFrame
     granule_IDs = list(listing.granule.unique())
 
-    # Ensure there is exactly one unique granule ID
-    if len(granule_IDs) != 1:
-        raise ValueError(f"there are {len(granule_IDs)} found in listing")
+    # Ensure there is at least one granule ID found
+    if len(granule_IDs) == 0:
+        raise ValueError("there are 0 found in listing")
+    elif len(granule_IDs) > 1:
+        logger.warning(f"Multiple granules ({len(granule_IDs)}) found in listing. Selecting the first one.")
     
-    # Create a GranuleID object from the unique granule ID
+    # Create a GranuleID object from the first unique granule ID
     granule_ID = GranuleID(granule_IDs[0])
 
     return granule_ID
@@ -73,7 +78,7 @@ def download_ECOSTRESS_granule_files(
             end_date=aquisition_date
         )
 
-    # Check that there is exactly one granule listed and get granule ID
+    # Check that there is at least one granule listed and get granule ID
     granule_ID = get_granule_from_listing(CMR_file_listing_df)
 
     # Validate orbit only when a specific orbit was requested

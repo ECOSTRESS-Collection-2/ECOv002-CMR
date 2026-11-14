@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 def ECOSTRESS_CMR_search(
         product: Union[str, List[str]],
         tile: Union[str, List[str]],
-        start_date: Union[date, str], 
+        start_date: Union[date, str] = None, 
         end_date: Union[date, str] = None,
+        acquisition_date: Union[date, str] = None,
         orbit: int = None,
         scene: int = None,
         CMR_search_URL: str = CMR_SEARCH_URL) -> pd.DataFrame:
@@ -34,6 +35,7 @@ def ECOSTRESS_CMR_search(
         tile: Sentinel-2 tile identifier or list of tile identifiers (for example, "11SLT").
         start_date: Start date as a date object or parsable date string.
         end_date: End date as a date object or parsable date string. Defaults to start_date.
+        acquisition_date: Alternative single date string or object; sets start/end date if provided.
         orbit: Optional orbit number filter.
         scene: Optional scene number filter.
         CMR_search_URL: Base URL for CMR search.
@@ -44,7 +46,17 @@ def ECOSTRESS_CMR_search(
     Raises:
         ValueError: If any product is invalid or no tile is provided.
     """
+    # Handle acquisition_date shortcut if passed
+    if acquisition_date is not None:
+        if isinstance(acquisition_date, str):
+            acquisition_date = parser.parse(acquisition_date).date()
+        start_date = acquisition_date
+        end_date = acquisition_date
+
     # Convert start_date and end_date to date objects if they are strings
+    if start_date is None:
+        raise ValueError("Either start_date or acquisition_date must be provided")
+
     if isinstance(start_date, str):
         start_date = parser.parse(start_date).date()
 
@@ -159,8 +171,6 @@ def main():
             tile=selected_tiles,
             start_date=args.start_date,
             end_date=args.end_date,
-            orbit=args.orbit,
-            scene=args.scene,
             CMR_search_URL=args.cmr_url
         )
 
