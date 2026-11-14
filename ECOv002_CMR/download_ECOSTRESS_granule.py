@@ -25,20 +25,29 @@ def download_ECOSTRESS_granule(
         CMR_search_URL: str = CMR_SEARCH_URL) -> ECOSTRESSGranule:
     """
     Downloads an ECOSTRESS granule based on the provided parameters and returns the granule object.
-
-    Parameters:
-    - product (str): The product type to download.
-    - tile (str): The tile identifier.
-    - aquisition_date (Union[date, str]): The date of acquisition.
-    - orbit (int, optional): The orbit number. Defaults to None.
-    - scene (int, optional): The scene number. Defaults to None.
-    - parent_directory (str, optional): The directory to save the downloaded files. Defaults to ".".
-    - CMR_file_listing_df (pd.DataFrame, optional): DataFrame containing file listings from CMR. Defaults to None.
-    - CMR_search_URL (str, optional): The URL for CMR search. Defaults to CMR_SEARCH_URL.
-
-    Returns:
-    - ECOSTRESSGranule: The downloaded ECOSTRESS granule object.
     """
+    # Pre-fetch the CMR file listing if not supplied
+    if CMR_file_listing_df is None:
+        CMR_file_listing_df = ECOSTRESS_CMR_search(
+            product=product,
+            tile=tile,
+            acquisition_date=aquisition_date,
+            orbit=orbit,
+            scene=scene,
+            CMR_search_URL=CMR_search_URL
+        )
+
+    # Disambiguate multiple matching revisions/versions returned by CMR in Collection 2
+    if CMR_file_listing_df is not None and not CMR_file_listing_df.empty:
+        if 'granule_ID' in CMR_file_listing_df.columns:
+            granule_IDs = CMR_file_listing_df['granule_ID'].unique()
+            if len(granule_IDs) > 1:
+                # Select the latest version/revision deterministically
+                latest_id = sorted(granule_IDs)[-1]
+                CMR_file_listing_df = CMR_file_listing_df[
+                    CMR_file_listing_df['granule_ID'] == latest_id
+                ].copy()
+
     directory = download_ECOSTRESS_granule_files(
         product=product,
         tile=tile,
