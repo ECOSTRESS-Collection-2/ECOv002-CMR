@@ -5,7 +5,11 @@ from os.path import exists, getsize, dirname, abspath, expanduser, join
 import logging
 import posixpath
 import requests
-from tqdm.notebook import tqdm
+
+try:
+    from tqdm.notebook import tqdm
+except ImportError:
+    from tqdm import tqdm
 
 import colored_logging as cl
 
